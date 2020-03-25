@@ -18,21 +18,78 @@ class MasterViewController: UITableViewController, NSFetchedResultsControllerDel
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view.
-        navigationItem.leftBarButtonItem = editButtonItem
+        
+        let url = URL(string: "https://www.googleapis.com/blogger/v3/blogs/32069983/posts?key=AIzaSyBx6yfxNErSMCOGHsNDVUOHiWEz_ygtJpA")!
+        
+        let task = URLSession.shared.dataTask(with: url) { (Data, URLResponse, Error) in
+            if Error != nil {
+                print(Error)
+                } else {
+                    if let urlContent = Data {
+                        do {
+                            if let jsonResult = try JSONSerialization.jsonObject(with: urlContent, options: JSONSerialization.ReadingOptions.mutableContainers) as? NSDictionary {                         //print("jsonResult: \(jsonResult)")
+                            
+                            //((jsonResult?["weather"] as? NSArray)?[0] as? NSDictionary)?["description"] as? String
+                                if let items = jsonResult["items"] as? NSArray {
+                                    
+                                    let context = self.fetchedResultsController.managedObjectContext
+                                    
+                                    let request = NSFetchRequest<Event>(entityName: "Event")
+                                    
+                                    do {
+                                        let results = try context.fetch(request)
+                                        if results.count > 0 {
+                                            for result in results {
+                                                context.delete(result)
+                                                
+                                                do {
+                                                    try context.save()
+                                                } catch {
+                                                    print("Specific delete failed.")
+                                                }
+                                            }
+                                        }
+                                    } catch {
+                                        print("Delete failed.")
+                                    }
+                                    
+                                    for item in items {
+                                        print("date published: \((item as! NSDictionary)["published"])")
+                                        print("title: \((item as! NSDictionary)["title"])")
+                                        print("content: \((item as! NSDictionary)["content"])")
+                                        
+                                        let context = self.fetchedResultsController.managedObjectContext
+                                       let newEvent = Event(context: context)
+                                            
+                                       // If appropriate, configure the new managed object.
+                                       newEvent.timestamp = Date()
+                                        newEvent.setValue(((item as! NSDictionary)["published"] as! String), forKey: "publishedDate")
+                                        newEvent.setValue(((item as! NSDictionary)["title"] as! String), forKey: "title")
+                                        newEvent.setValue(((item as! NSDictionary)["content"] as! String), forKey: "content")
 
-        let addButton = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(insertNewObject(_:)))
-        navigationItem.rightBarButtonItem = addButton
-        if let split = splitViewController {
-            let controllers = split.viewControllers
-            detailViewController = (controllers[controllers.count-1] as! UINavigationController).topViewController as? DetailViewController
+                                       // Save the context.
+                                       do {
+                                           try context.save()
+                                       } catch {
+                                           // Replace this implementation with code to handle the error appropriately.
+                                           // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
+                                           let nserror = error as NSError
+                                           fatalError("Unresolved error \(nserror), \(nserror.userInfo)")
+                                       }
+                                    }
+                                }
+                                DispatchQueue.main.async {
+                                    self.tableView.reloadData()
+                                }                            }
+                        } catch {
+                            print("JSON processing fails.")
+                        }
+               }
+           }
         }
+        task.resume()
     }
-
-    override func viewWillAppear(_ animated: Bool) {
-        clearsSelectionOnViewWillAppear = splitViewController!.isCollapsed
-        super.viewWillAppear(animated)
-    }
-
+ 
     @objc
     func insertNewObject(_ sender: Any) {
         let context = self.fetchedResultsController.managedObjectContext
@@ -87,7 +144,7 @@ class MasterViewController: UITableViewController, NSFetchedResultsControllerDel
 
     override func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
         // Return false if you do not want the specified item to be editable.
-        return true
+        return false
     }
 
     override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
@@ -107,7 +164,7 @@ class MasterViewController: UITableViewController, NSFetchedResultsControllerDel
     }
 
     func configureCell(_ cell: UITableViewCell, withEvent event: Event) {
-        cell.textLabel!.text = event.timestamp!.description
+        cell.textLabel!.text = event.title!.description
     }
 
     // MARK: - Fetched results controller
@@ -123,7 +180,7 @@ class MasterViewController: UITableViewController, NSFetchedResultsControllerDel
         fetchRequest.fetchBatchSize = 20
         
         // Edit the sort key as appropriate.
-        let sortDescriptor = NSSortDescriptor(key: "timestamp", ascending: false)
+        let sortDescriptor = NSSortDescriptor(key: "publishedDate", ascending: false)
         
         fetchRequest.sortDescriptors = [sortDescriptor]
         
